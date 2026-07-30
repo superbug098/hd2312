@@ -1,5 +1,5 @@
 KVERSION ?= $(shell uname -r)
-KDIR ?= /lib/modules/$(KVERSION)/build
+KDIR ?= /lib/modules/$(KVERSION)/kernel
 CURDIR := $(shell pwd)
 
 hd2312-objs := hdic_hd2312.o
