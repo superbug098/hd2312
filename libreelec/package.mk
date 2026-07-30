@@ -2,7 +2,7 @@
 # Copyright (C) 2024 hanwckf
 
 PKG_NAME="HD2312"
-PKG_VERSION="c27dbe39ff568d3591192e80e028a22ad7768867"
+PKG_VERSION="c8d4a3e85abacdfc71c2325c1fcbb4d5a63f10c8"
 PKG_LICENSE="GPL"
 PKG_SITE="https://github.com/superbug098/hd2312"
 PKG_URL="https://github.com/hanwckf/superbug098/archive/${PKG_VERSION}.tar.gz"
