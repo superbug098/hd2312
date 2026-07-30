@@ -3,7 +3,6 @@
 
 PKG_NAME="HD2312"
 PKG_VERSION="c27dbe39ff568d3591192e80e028a22ad7768867"
-PKG_SHA256="4e72adcd55687db975920d21c600d7f981dc9941d01a64516113bd336f434d8d"
 PKG_LICENSE="GPL"
 PKG_SITE="https://github.com/superbug098/hd2312"
 PKG_URL="https://github.com/hanwckf/superbug098/archive/${PKG_VERSION}.tar.gz"
