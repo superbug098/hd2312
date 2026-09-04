@@ -218,7 +218,7 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		USB_TYPE_VENDOR | USB_DIR_IN,
 		0xFE, 0, buf, 2, 500);
 
-	if (ret == 4) {
+	if (ret == 2) {
 		pr_debug("%s: strength: %02X, %02X, %02X, %02X\n", __func__, buf[0], buf[1], buf[2], buf[3]);
 
 		c->strength.stat[0].scale = FE_SCALE_RELATIVE;
@@ -233,7 +233,7 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		0xFE, 0, buf, 2, 500);
 
 	if (ret == 2) {
-		pr_debug("%s: snr: %02X, %02X\n", __func__, buf[0], buf[1]);
+		pr_debug("%s: snr:%02X , %02X\n", __func__, buf[0], buf[1]);
 
 		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
 		c->cnr.stat[0].svalue = (buf[0] * 1000) + (buf[1] * 10);
