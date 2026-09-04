@@ -216,7 +216,7 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		CYUSB_HD2312_GET_STRENGTH,
 		USB_TYPE_VENDOR | USB_DIR_IN,
-		0xFE, 0, buf, 4, 500);
+		0xFE, 0, buf, 2, 500);
 
 	if (ret == 4) {
 		pr_debug("%s: strength: %02X, %02X, %02X, %02X\n", __func__, buf[0], buf[1], buf[2], buf[3]);
