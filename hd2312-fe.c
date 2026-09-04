@@ -223,7 +223,7 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 		c->strength.stat[0].scale = FE_SCALE_RELATIVE;
 		/* scale to 0xffff */
-		c->strength.stat[0].uvalue = buf[3] * 0xffff / 100;
+		c->strength.stat[0].uvalue = (buf[0] * 1000) + (buf[1] * 10);
 	}
 
 	/* get snr */
