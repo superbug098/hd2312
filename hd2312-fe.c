@@ -3,9 +3,9 @@
  * Copyright (C) 2024 hanwckf <hanwckf@vip.qq.com>
  */
 
+#include <linux/dvb/frontend.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/dvb/frontend.h>
 #include <linux/types.h>
 #include <linux/version.h>
 
@@ -19,14 +19,14 @@ struct dvb_frontend *hd2312_attach(struct dvb_usb_device *dev)
 	struct hd2312_state *state;
 	struct dtv_frontend_properties *c;
 
-	state = kzalloc(sizeof(struct hd2312_state), GFP_KERNEL);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
 	state->dev = dev;
 
 	memcpy(&state->frontend.ops, &hd2312_ops,
-		sizeof(struct dvb_frontend_ops));
+	       sizeof(struct dvb_frontend_ops));
 	state->frontend.demodulator_priv = state;
 
 	c = &state->frontend.dtv_property_cache;
@@ -47,6 +47,7 @@ static int hd2312_init(struct dvb_frontend *fe)
 	struct hd2312_state *state = fe->demodulator_priv;
 
 	state->frequency = 0;
+
 	return 0;
 }
 
@@ -55,11 +56,8 @@ static int hd2312_set_frontend(struct dvb_frontend *fe)
 	struct hd2312_state *state = fe->demodulator_priv;
 	struct usb_device *dev;
 	u32 freq;
+	u8 buf[4];
 	int ret;
-	u8 *buf = kzalloc(4, GFP_KERNEL);
-
-	if (!buf)
-		return -ENOMEM;
 
 	freq = fe->dtv_property_cache.frequency;
 	dev = state->dev->udev;
@@ -72,52 +70,52 @@ static int hd2312_set_frontend(struct dvb_frontend *fe)
 	pr_debug("hd2312: set freq %u Hz\n", freq);
 
 	ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		CYUSB_HD2312_SET_FREQ,
-		USB_TYPE_VENDOR,
-		0xFE, 0, buf, 4, 500);
+			      CYUSB_HD2312_SET_FREQ,
+			      USB_TYPE_VENDOR,
+			      0xFE, 0, buf, sizeof(buf), 500);
 
-	state->frequency = fe->dtv_property_cache.frequency;
+	if (ret == sizeof(buf))
+		state->frequency = freq;
 
-	kfree(buf);
-
-	if (ret < 0)
-		return ret;
-
-	return ret == 4 ? 0 : -EIO;
+	return ret == sizeof(buf) ? 0 : ret;
 }
 
-static int hd2312_get_tune_settings(struct dvb_frontend *fe,
+static int hd2312_get_tune_settings(
+	struct dvb_frontend *fe,
 	struct dvb_frontend_tune_settings *fe_tune_settings)
 {
 	fe_tune_settings->min_delay_ms = 1000;
 	fe_tune_settings->step_size = 0;
 	fe_tune_settings->max_drift = 0;
+
 	return 0;
 }
 
-static int hd2312_get_frontend(struct dvb_frontend *fe,
+static int hd2312_get_frontend(
+	struct dvb_frontend *fe,
 	struct dtv_frontend_properties *c)
 {
 	struct hd2312_state *state = fe->demodulator_priv;
 	struct usb_device *dev;
-	int ret;
-
 	u8 *data = state->status;
+	int ret;
 
 	c->frequency = state->frequency;
 
 	dev = state->dev->udev;
 
 	ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		CYUSB_HD2312_GET_FRONTEND,
-		USB_TYPE_VENDOR | USB_DIR_IN,
-		0xFE, 0, data, 6, 500);
+			      CYUSB_HD2312_GET_FRONTEND,
+			      USB_TYPE_VENDOR | USB_DIR_IN,
+			      0xFE, 0, data, 6, 500);
 
 	if (ret != 6)
 		return 0;
 
 	pr_debug("%s: fe status: %02X, %02X, %02X, %02X, %02X, %02X\n",
-		__func__, data[0], data[1], data[2], data[3], data[4], data[5]);
+		 __func__,
+		 data[0], data[1], data[2],
+		 data[3], data[4], data[5]);
 
 	switch (data[0]) {
 	case 0:
@@ -187,102 +185,71 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	struct hd2312_state *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct usb_device *dev;
-	int ret;
-
-	u8 *isLock = &state->islock;
+	u8 *is_lock = &state->islock;
 	u8 *buf = state->statistics;
+	int ret;
 
 	*status = 0;
 
 	dev = state->dev->udev;
 
-	/* Get lock status. */
+	/* Check frontend lock status. */
 	ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		CYUSB_HD2312_GET_LOCK,
-		USB_TYPE_VENDOR | USB_DIR_IN,
-		0xFE, 0, isLock, 1, 500);
+			      CYUSB_HD2312_GET_LOCK,
+			      USB_TYPE_VENDOR | USB_DIR_IN,
+			      0xFE, 0, is_lock, 1, 500);
 
-	pr_debug("%s: isLock: %02X\n", __func__, *isLock);
+	pr_debug("%s: isLock: %02X\n", __func__, *is_lock);
 
-	if (ret == 1 && *isLock == 0x1) {
-		*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER |
-			FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
+	if (ret == 1 && *is_lock == 0x1) {
+		*status |= FE_HAS_SIGNAL |
+			   FE_HAS_CARRIER |
+			   FE_HAS_VITERBI |
+			   FE_HAS_SYNC |
+			   FE_HAS_LOCK;
 	}
 
 	state->fe_status = *status;
 
 	/*
-	 * If the frontend is not locked, signal strength and SNR
+	 * Frontend is not locked, so signal strength and CNR
 	 * are not available.
 	 */
 	if (!(state->fe_status & FE_HAS_LOCK)) {
 		c->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+
 		return 0;
 	}
 
-	/*
-	 * Scheme A:
-	 *
-	 * Do not use CYUSB_HD2312_GET_STRENGTH.
-	 * Use the SNR returned by CYUSB_HD2312_GET_SNR as the
-	 * value reported for BOTH signal strength and CNR.
-	 *
-	 * Signal strength therefore uses FE_SCALE_DECIBEL instead
-	 * of FE_SCALE_RELATIVE.
-	 *
-	 * This means applications reading DVB frontend statistics
-	 * will receive the same numerical SNR value for signal
-	 * strength and CNR, in 0.001 dB units.
-	 *
-	 * Example:
-	 *     SNR = 25.3 dB
-	 *
-	 * reports:
-	 *     signal strength = 25.3 dB
-	 *     CNR             = 25.3 dB
-	 */
+	/* Get signal strength. */
 	ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		CYUSB_HD2312_GET_SNR,
-		USB_TYPE_VENDOR | USB_DIR_IN,
-		0xFE, 0, buf, 2, 500);
+			      CYUSB_HD2312_GET_STRENGTH,
+			      USB_TYPE_VENDOR | USB_DIR_IN,
+			      0xFE, 0, buf, 4, 500);
+
+	if (ret == 4) {
+		pr_debug("%s: strength: %02X, %02X, %02X, %02X\n",
+			 __func__, buf[0], buf[1], buf[2], buf[3]);
+
+		c->strength.stat[0].scale = FE_SCALE_RELATIVE;
+
+		/* Scale strength to 0xffff. */
+		c->strength.stat[0].uvalue = buf[3] * 0xffff / 100;
+	}
+
+	/* Get SNR/CNR. */
+	ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+			      CYUSB_HD2312_GET_SNR,
+			      USB_TYPE_VENDOR | USB_DIR_IN,
+			      0xFE, 0, buf, 2, 500);
 
 	if (ret == 2) {
-		u32 snr;
-
 		pr_debug("%s: snr: %02X, %02X\n",
-			__func__, buf[0], buf[1]);
+			 __func__, buf[0], buf[1]);
 
-		/*
-		 * Keep the original driver's SNR conversion:
-		 *
-		 *     snr = (buf[0] * 1000) + (buf[1] * 10);
-		 *
-		 * DVB FE_SCALE_DECIBEL uses 0.001 dB units.
-		 */
-		snr = (buf[0] * 1000) + (buf[1] * 10);
-
-		/*
-		 * CNR / SNR.
-		 */
 		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
-		c->cnr.stat[0].svalue = snr;
-
-		/*
-		 * Signal strength uses exactly the same SNR value.
-		 *
-		 * Unlike Scheme B, there is NO conversion to 0..0xffff
-		 * relative strength. Signal strength is reported as
-		 * decibels directly.
-		 */
-		c->strength.stat[0].scale = FE_SCALE_DECIBEL;
-		c->strength.stat[0].svalue = snr;
-
-		pr_debug("%s: strength/snr=%u.%03u dB\n",
-			__func__, snr / 1000, snr % 1000);
-	} else {
-		c->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-		c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+		c->cnr.stat[0].svalue = (buf[0] * 1000) + (buf[1] * 10);
 	}
 
 	return 0;
@@ -291,11 +258,14 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 static int hd2312_read_ucblocks(struct dvb_frontend *fe, u32 *ucblocks)
 {
 	*ucblocks = 0;
+
 	return 0;
 }
 
 static const struct dvb_frontend_ops hd2312_ops = {
-	.delsys = { SYS_DVBT },
+	.delsys = {
+		SYS_DVBT,
+	},
 	.info = {
 		.name = "HDIC HD2312",
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 15, 0)
@@ -307,7 +277,8 @@ static const struct dvb_frontend_ops hd2312_ops = {
 		.frequency_max = 858000000,
 		.frequency_stepsize = 10000,
 #endif
-		.caps = FE_CAN_FEC_AUTO | FE_CAN_QAM_AUTO |
+		.caps = FE_CAN_FEC_AUTO |
+			FE_CAN_QAM_AUTO |
 			FE_CAN_TRANSMISSION_MODE_AUTO |
 			FE_CAN_BANDWIDTH_AUTO |
 			FE_CAN_GUARD_INTERVAL_AUTO |
@@ -322,6 +293,6 @@ static const struct dvb_frontend_ops hd2312_ops = {
 	.read_ucblocks = hd2312_read_ucblocks,
 };
 
-MODULE_DESCRIPTION("hd2312-fe");
+MODULE_DESCRIPTION("HD2312 frontend driver");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("hanwckf <hanwckf@vip.qq.com>");
