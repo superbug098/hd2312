@@ -222,21 +222,25 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	}
 
 	/*
-	 * Scheme B:
+	 * Scheme A:
 	 *
 	 * Do not use CYUSB_HD2312_GET_STRENGTH.
 	 * Use the SNR returned by CYUSB_HD2312_GET_SNR as the
-	 * source for signal strength, while keeping signal
-	 * strength in FE_SCALE_RELATIVE (0..0xffff).
+	 * value reported for BOTH signal strength and CNR.
 	 *
-	 * The SNR is assumed to be reported by the original
-	 * driver as:
+	 * Signal strength therefore uses FE_SCALE_DECIBEL instead
+	 * of FE_SCALE_RELATIVE.
 	 *
-	 *     snr = buf[0] * 1000 + buf[1] * 10
+	 * This means applications reading DVB frontend statistics
+	 * will receive the same numerical SNR value for signal
+	 * strength and CNR, in 0.001 dB units.
 	 *
-	 * where the resulting value is in 0.001 dB units.
+	 * Example:
+	 *     SNR = 25.3 dB
 	 *
-	 * Here 0 dB -> 0 and 50 dB -> 0xffff.
+	 * reports:
+	 *     signal strength = 25.3 dB
+	 *     CNR             = 25.3 dB
 	 */
 	ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		CYUSB_HD2312_GET_SNR,
@@ -245,37 +249,37 @@ static int hd2312_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	if (ret == 2) {
 		u32 snr;
-		u32 strength;
 
 		pr_debug("%s: snr: %02X, %02X\n",
 			__func__, buf[0], buf[1]);
 
+		/*
+		 * Keep the original driver's SNR conversion:
+		 *
+		 *     snr = (buf[0] * 1000) + (buf[1] * 10);
+		 *
+		 * DVB FE_SCALE_DECIBEL uses 0.001 dB units.
+		 */
 		snr = (buf[0] * 1000) + (buf[1] * 10);
 
 		/*
-		 * Keep the normal DVB CNR representation.
+		 * CNR / SNR.
 		 */
 		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
 		c->cnr.stat[0].svalue = snr;
 
 		/*
-		 * Use SNR as the source of signal strength.
+		 * Signal strength uses exactly the same SNR value.
 		 *
-		 * 0 dB  = 0
-		 * 50 dB = 65535
-		 *
-		 * Clamp values above 50 dB to 100%.
+		 * Unlike Scheme B, there is NO conversion to 0..0xffff
+		 * relative strength. Signal strength is reported as
+		 * decibels directly.
 		 */
-		if (snr >= 50000)
-			strength = 0xffff;
-		else
-			strength = (snr * 0xffff) / 50000;
+		c->strength.stat[0].scale = FE_SCALE_DECIBEL;
+		c->strength.stat[0].svalue = snr;
 
-		c->strength.stat[0].scale = FE_SCALE_RELATIVE;
-		c->strength.stat[0].uvalue = strength;
-
-		pr_debug("%s: SNR=%u.%03u dB, strength=%u/65535\n",
-			__func__, snr / 1000, snr % 1000, strength);
+		pr_debug("%s: strength/snr=%u.%03u dB\n",
+			__func__, snr / 1000, snr % 1000);
 	} else {
 		c->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
